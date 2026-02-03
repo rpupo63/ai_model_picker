@@ -86,7 +86,8 @@
     "model_api_ids": {
       "Gemini 3 Pro (Deep Think)": "gemini-3-pro-preview-high",
       "Gemini 3 Pro": "gemini-3-pro-preview-low",
-      "Gemini 3 Flash": "gemini-3-flash",
+      "Gemini 3 Flash": "gemini-3-flash-preview",
+      "gemini-3-flash": "gemini-3-flash-preview",
       "Gemini 2.5 Pro Max Thinking": "gemini-2.5-pro-max-thinking",
       "Gemini 2.5 Flash Max Thinking": "gemini-2.5-flash-max-thinking",
       "Gemini 1.5 Pro": "gemini-1.5-pro",
