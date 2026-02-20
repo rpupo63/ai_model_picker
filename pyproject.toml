@@ -27,6 +27,10 @@ authors = [
     {name = "Beto"}
 ]
 
+dependencies = [
+    "InquirerPy>=0.3.4",
+]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",

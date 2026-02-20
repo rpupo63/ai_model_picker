@@ -29,3 +29,8 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated Files / Temporary
+*.db
+pip-cache/
+npm-debug.log
