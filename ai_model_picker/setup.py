@@ -23,7 +23,6 @@ from .config import (
     set_api_key,
     get_all_api_keys,
 )
-from .preference import build_preference, save_preference
 from .selector import select_provider, select_model
 from .types import UserConfig
 
@@ -59,15 +58,6 @@ def display_config(
     print()
     print(f"Provider: {get_provider_display_name(config.provider)}")
     print(f"Model: {config.model}")
-    if config.instructions:
-        preview = config.instructions.replace("\n", " ")
-        if len(preview) > 80:
-            preview = preview[:77] + "..."
-        print(f"Instructions: {preview}")
-    if config.temperature is not None:
-        print(f"Temperature: {config.temperature}")
-    if config.max_tokens is not None:
-        print(f"Max tokens: {config.max_tokens}")
     print()
 
     # API Keys
@@ -274,37 +264,8 @@ def setup_wizard(
     else:
         print(f"  Keeping current default: {config.model}")
 
-    # Step 4: Optional additional instructions (handoff to other services)
-    print()
-    print("-" * 70)
-    print("Step 4: Additional Model Instructions (optional)")
-    print("-" * 70)
-    print()
-    print("These instructions are saved in the preference handoff payload.")
-    print("API keys are never included in that payload.")
-    print()
-    try:
-        instructions = inquirer.text(
-            message="Additional instructions",
-            default=config.instructions or "",
-            mandatory=False,
-        ).execute()
-        if instructions is not None:
-            config.instructions = instructions
-    except KeyboardInterrupt:
-        pass
-
-    # Save configuration + secrets-free preference.json for sibling services
+    # Save configuration
     save_config(config, app_name)
-    preference = build_preference(
-        provider=config.provider,
-        model=config.model,
-        instructions=config.instructions,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        app_name=app_name,
-    )
-    preference_path = save_preference(preference, app_name, sync_config=False)
 
     # Summary
     print()
@@ -313,12 +274,9 @@ def setup_wizard(
     print("=" * 70)
     print()
     print(f"Configuration saved to: {get_config_path(app_name)}")
-    print(f"Preference handoff saved to: {preference_path}")
     print()
     print(f"Default provider: {get_provider_display_name(config.provider)}")
     print(f"Default model: {config.model}")
-    if config.instructions:
-        print(f"Instructions: {config.instructions}")
     print()
 
     if on_complete:

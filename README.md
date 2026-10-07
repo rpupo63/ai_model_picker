@@ -1,51 +1,16 @@
 # AI Model Picker
 
-A unified Python **library** (not a token-passing microservice) for AI model provider selection and configuration. Provides a shared foundation for applications that need to:
+A unified Python library for AI model provider selection and configuration. Provides a shared foundation for applications that need to:
 
 - Select AI providers (OpenAI, Anthropic, Google, Mistral, etc.)
 - Choose models from those providers
-- Persist a secrets-free **preference handoff** (`provider`, `model_id`, `instructions`) for sibling services
-- Manage API keys locally with environment variable fallback (keys stay with the app / vault / gateway)
-
-## Architecture
-
-```
-App / CLI ──► ai-model-picker (library)
-                ├─ catalog (OpenRouter + cache)
-                ├─ local config + API keys
-                └─ preference.json ──handoff──► other service / gateway
-                                              (no API keys in payload)
-```
-
-**Do share across apps:** live catalog sync, provider→model mapping, display→API IDs, preference payload.
-
-**Do not use this package as:** a microservice that stores or forwards upstream LLM API keys to other services. Pass `ModelPreference` instead; keep secrets at the inference edge.
-
-### Consumer API surface (CLI apps)
-
-Use these exports only; pass a distinct `app_name` per app (e.g. `ai_auto_commit`, `ai-rules-generator`):
-
-| API | Role |
-|-----|------|
-| `get_available_providers` / `get_provider_models` / `get_model_api_id` | Live catalog |
-| `select_provider` / `select_model` / `select_preference` | Interactive UX |
-| `get_api_key_with_fallback` / `set_api_key` | Local secrets only |
-| `load_preference` / `save_preference` / `to_handoff_dict` | Secrets-free selection + instructions |
-| `call_ai` / `call_with_preference` | Optional unified caller |
-
-Do not hardcode provider allowlists in consuming apps — derive them from `get_available_providers()`.
-
-For local development of sibling CLIs:
-
-```bash
-pip install -e ../model_picker
-# or rebuild AUR packages that vendor the sibling wheel
-```
+- Manage API keys with environment variable fallback
+- Persist configuration across sessions
 
 ## Installation
 
 ```bash
-pip install "ai-model-picker>=0.2.0"
+pip install ai-model-picker
 ```
 
 Or install from source:
@@ -77,40 +42,6 @@ api_key = get_api_key_with_fallback(provider, app_name="my-app")
 model_id = get_model_api_id(model, provider)
 ```
 
-### Preference handoff (for other services)
-
-```python
-from ai_model_picker import (
-    build_preference,
-    save_preference,
-    load_preference,
-    to_handoff_dict,
-    handoff_json,
-    select_preference,
-)
-
-# Programmatic
-pref = build_preference(
-    "anthropic",
-    "Claude Sonnet 5",
-    instructions="Prefer concise, code-first answers.",
-    app_name="my-app",
-)
-save_preference(pref, app_name="my-app")
-
-# Secrets-free dict/JSON for a sibling service or gateway
-payload = to_handoff_dict(pref)
-# {"provider": "anthropic", "model": "...", "model_id": "claude-sonnet-5",
-#  "instructions": "...", "app_name": "my-app"}
-
-# Interactive pick + optional instructions
-pref = select_preference(app_name="my-app")
-print(handoff_json(pref))
-```
-
-Preference files live next to config: `~/.config/{app_name}/preference.json`.
-They never contain API keys.
-
 ## Features
 
 ### Supported Providers
@@ -124,35 +55,6 @@ They never contain API keys.
 - **DeepSeek** - R1, V3.x
 - **xAI** - Grok 4.x
 - **Alibaba** - Qwen3
-- **Moonshot (Kimi)** - Kimi K2/K3
-- **Z.ai (GLM)** - GLM 5.x
-- **MiniMax** - M2/M3
-- **Perplexity** - Sonar
-- **NVIDIA** - Nemotron
-- **ByteDance Seed** - Seed 1.6/2.0
-- **Tencent (Hunyuan)** - Hy3 / Hunyuan
-- **Xiaomi (MiMo)** - MiMo V2.5
-- **Amazon (Nova)** - Nova Pro/Lite/Micro
-- **StepFun** - Step 3.x
-
-Model catalogs are refreshed from [OpenRouter's unified models API](https://openrouter.ai/api/v1/models) (`GET /api/v1/models`), so deprecated models drop out automatically. Results are cached under `~/.config/{app_name}/openrouter_models_cache.json` (default TTL: 6 hours). If the network is unavailable, the library falls back to the bundled `provider_models.json`.
-
-```python
-from ai_model_picker import refresh_provider_models, get_providers_source, get_provider_models
-
-# Force a fresh pull from OpenRouter
-refresh_provider_models()
-print(get_providers_source())  # "openrouter"
-print(get_provider_models("anthropic")[:5])
-```
-
-Environment knobs:
-
-| Variable | Effect |
-|----------|--------|
-| `AI_MODEL_PICKER_OFFLINE=1` | Skip network; use cache / bundled JSON |
-| `AI_MODEL_PICKER_CACHE_TTL` | Cache lifetime in seconds (default `21600`) |
-| `AI_MODEL_PICKER_OPENROUTER_URL` | Override the models endpoint URL |
 
 ### Configuration
 
@@ -263,14 +165,11 @@ if not available:
 For applications using this library, specify a custom `app_name` to isolate configuration:
 
 ```python
-from ai_model_picker import setup_wizard, load_config, load_preference, to_handoff_dict
+from ai_model_picker import setup_wizard, load_config
 
-# Each app has its own config + preference files
+# Each app has its own config file
 config = setup_wizard(app_name="ai-auto-commit")
 config = load_config(app_name="ai-rules-generator")
-
-# Sibling service receives preference only (not API keys)
-handoff = to_handoff_dict(load_preference(app_name="ai-rules-generator"))
 ```
 
 ## Optional Dependencies
@@ -287,13 +186,8 @@ pip install mistralai            # Mistral
 pip install cohere               # Cohere
 pip install dashscope            # Alibaba Qwen
 
-# OpenAI-compatible providers (DeepSeek, xAI, Meta, Moonshot, Z.ai, MiniMax,
-# Perplexity, NVIDIA, ByteDance, Tencent, Xiaomi, Amazon, StepFun):
-pip install openai
+# DeepSeek, xAI, Meta use OpenAI-compatible APIs (just need openai package)
 ```
-
-Override any OpenAI-compatible base URL with `{PROVIDER}_BASE_URL`
-(e.g. `ZAI_BASE_URL`, `MINIMAX_BASE_URL`, `MOONSHOT_BASE_URL`).
 
 ## License
 

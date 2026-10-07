@@ -1,12 +1,8 @@
 """
 AI Model Picker - Unified AI model provider selection and configuration.
 
-A shared library for selecting AI providers/models, managing local API keys,
-and producing a secrets-free preference payload for other services.
-
-This package is library-first: it is not a token-passing microservice.
-Cross-service handoff uses ModelPreference (provider, model_id, instructions),
-never upstream API keys.
+A shared library for selecting AI providers, models, and managing API keys
+across multiple applications.
 """
 
 from .config import (
@@ -17,8 +13,6 @@ from .config import (
     reset_config,
     # Provider/model getters
     get_available_providers,
-    get_providers_source,
-    refresh_provider_models,
     get_provider_display_name,
     get_provider_models,
     get_provider_env_var,
@@ -49,23 +43,10 @@ from .setup import (
     display_config,
 )
 
-from .preference import (
-    build_preference,
-    preference_from_config,
-    load_preference,
-    save_preference,
-    to_handoff_dict,
-    handoff_json,
-    select_preference,
-    get_preference_path,
-    call_with_preference,
-)
-
 from .types import (
     Provider,
     ProviderInfo,
     UserConfig,
-    ModelPreference,
     SUPPORTED_PROVIDERS,
 )
 
@@ -78,7 +59,7 @@ from .client import (
     check_provider_available,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.1.0"
 
 __all__ = [
     # Version
@@ -87,7 +68,6 @@ __all__ = [
     "Provider",
     "ProviderInfo",
     "UserConfig",
-    "ModelPreference",
     "SUPPORTED_PROVIDERS",
     # Config
     "get_config_path",
@@ -95,8 +75,6 @@ __all__ = [
     "save_config",
     "reset_config",
     "get_available_providers",
-    "get_providers_source",
-    "refresh_provider_models",
     "get_provider_display_name",
     "get_provider_models",
     "get_provider_env_var",
@@ -104,7 +82,7 @@ __all__ = [
     "get_default_model",
     "set_default_provider",
     "set_default_model",
-    # API keys (local only — not for cross-service handoff)
+    # API keys
     "get_api_key",
     "set_api_key",
     "remove_api_key",
@@ -113,16 +91,6 @@ __all__ = [
     # Model ID mapping
     "get_model_api_id",
     "register_model_api_id",
-    # Preference handoff (secrets-free)
-    "build_preference",
-    "preference_from_config",
-    "load_preference",
-    "save_preference",
-    "to_handoff_dict",
-    "handoff_json",
-    "select_preference",
-    "get_preference_path",
-    "call_with_preference",
     # Selector
     "select_provider",
     "select_model",

@@ -1,6 +1,6 @@
 # Maintainer: Beto
 pkgname=ai-model-picker
-pkgver=0.2.0
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Unified AI model provider selection and configuration library"
 arch=('any')

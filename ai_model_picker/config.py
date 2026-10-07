@@ -2,10 +2,7 @@
 Configuration management for AI Model Picker.
 
 Handles loading/saving user preferences, API keys, and provider/model definitions.
-
-Model lists are fetched live from OpenRouter's unified models API when possible,
-with a disk cache and provider_models.json as offline fallbacks. Provider
-metadata (display name, env var, type) still comes from the local JSON skeleton.
+Provider and model lists are loaded from provider_models.json for easy updates.
 """
 
 from __future__ import annotations
@@ -14,9 +11,8 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 
-from .openrouter import get_live_provider_catalogs
 from .types import Provider, ProviderInfo, UserConfig, SUPPORTED_PROVIDERS
 
 # Default providers if provider_models.json is missing
@@ -54,66 +50,11 @@ _DEFAULT_PROVIDERS: Dict[str, Dict[str, Any]] = {
 
 # Cache for loaded providers
 _providers_cache: Optional[Dict[str, Dict[str, Any]]] = None
-_providers_source: Optional[str] = None  # "openrouter" | "static" | "default"
 
 
 def _get_provider_models_path() -> Path:
     """Path to provider_models.json (next to this module)."""
     return Path(__file__).parent / "provider_models.json"
-
-
-def _get_openrouter_cache_path(app_name: str = "ai-model-picker") -> Path:
-    """Path to the disk cache for OpenRouter model catalogs."""
-    return get_config_dir(app_name) / "openrouter_models_cache.json"
-
-
-def _load_static_providers() -> Tuple[Dict[str, Dict[str, Any]], str]:
-    """Load bundled provider_models.json, or built-in defaults.
-
-    Returns
-    -------
-    (providers, source)
-        source is ``"static"`` or ``"default"``.
-    """
-    path = _get_provider_models_path()
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and data:
-                return data, "static"
-        except (json.JSONDecodeError, OSError):
-            pass
-    return dict(_DEFAULT_PROVIDERS), "default"
-
-
-def _merge_live_catalogs(
-    base: Dict[str, Dict[str, Any]],
-    live: Dict[str, Dict[str, Any]],
-) -> Dict[str, Dict[str, Any]]:
-    """
-    Overlay live OpenRouter model lists onto the static provider skeleton.
-
-    Keeps provider metadata (name/type/env_var) from the local definition and
-    replaces models / model_api_ids when OpenRouter has entries for that provider.
-    """
-    merged: Dict[str, Dict[str, Any]] = {}
-
-    for provider_key, provider_data in base.items():
-        entry = dict(provider_data)
-        live_catalog = live.get(provider_key)
-        if live_catalog and live_catalog.get("models"):
-            entry["models"] = list(live_catalog["models"])
-            entry["model_api_ids"] = dict(live_catalog.get("model_api_ids") or {})
-            if live_catalog.get("model_metadata"):
-                entry["model_metadata"] = dict(live_catalog["model_metadata"])
-        merged[provider_key] = entry
-
-    # Preserve any live providers we don't already know about only if they map
-    # to a known skeleton key (already handled). Unknown providers stay out so
-    # API-key / client wiring stays consistent.
-
-    return merged
 
 
 def get_config_dir(app_name: str = "ai-model-picker") -> Path:
@@ -228,97 +169,35 @@ def reset_config(app_name: str = "ai-model-picker") -> None:
         config_path.unlink()
 
 
-def get_providers_source() -> Optional[str]:
-    """
-    Return where the current in-memory provider catalog came from.
-
-    Returns
-    -------
-    str | None
-        ``"openrouter"``, ``"static"``, ``"default"``, or None if not loaded yet.
-    """
-    return _providers_source
-
-
-def refresh_provider_models(
-    app_name: str = "ai-model-picker",
-    *,
-    force: bool = True,
-) -> Dict[str, Dict[str, Any]]:
-    """
-    Refresh the provider/model catalog from OpenRouter.
-
-    Parameters
-    ----------
-    app_name : str
-        Application name used for the disk cache directory.
-    force : bool
-        When True (default), ignore TTL and refetch from OpenRouter.
-
-    Returns
-    -------
-    Dict[str, Dict[str, Any]]
-        The refreshed provider catalog.
-    """
-    global _providers_cache, _providers_source
-    _providers_cache = None
-    _providers_source = None
-    return get_available_providers(app_name=app_name, force_refresh=force)
-
-
-def get_available_providers(
-    app_name: str = "ai-model-picker",
-    *,
-    force_refresh: bool = False,
-) -> Dict[str, Dict[str, Any]]:
+def get_available_providers() -> Dict[str, Dict[str, Any]]:
     """
     Get available AI providers and their models.
 
-    Prefers a live catalog from OpenRouter (``GET /api/v1/models``), with an
-    on-disk cache. Falls back to bundled ``provider_models.json``, then to
-    built-in defaults when the network/cache is unavailable.
-
-    Parameters
-    ----------
-    app_name : str
-        Application name used for the OpenRouter disk cache directory.
-    force_refresh : bool
-        When True, bypass the in-memory and TTL caches and refetch.
+    Loads from provider_models.json when present. Falls back to built-in
+    defaults if the file is missing or invalid.
 
     Returns
     -------
     Dict[str, Dict[str, Any]]
         Dictionary mapping provider keys to their configuration.
     """
-    global _providers_cache, _providers_source
+    global _providers_cache
 
-    if _providers_cache is not None and not force_refresh:
+    if _providers_cache is not None:
         return _providers_cache
 
-    base, static_source = _load_static_providers()
+    path = _get_provider_models_path()
+    if path.exists():
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and data:
+                _providers_cache = data
+                return data
+        except (json.JSONDecodeError, OSError):
+            pass
 
-    live, error = get_live_provider_catalogs(
-        _get_openrouter_cache_path(app_name),
-        force_refresh=force_refresh,
-    )
-
-    if live:
-        merged = _merge_live_catalogs(base, live)
-        _providers_cache = merged
-        _providers_source = "openrouter"
-        if error:
-            print(f"Warning: {error}", file=sys.stderr)
-        return merged
-
-    if error:
-        print(
-            f"Warning: OpenRouter model fetch failed ({error}); "
-            "using bundled provider_models.json",
-            file=sys.stderr,
-        )
-
-    _providers_cache = base
-    _providers_source = static_source
+    _providers_cache = dict(_DEFAULT_PROVIDERS)
     return _providers_cache
 
 
@@ -579,8 +458,8 @@ def get_model_api_id(
     """
     Get the API ID for a model display name.
 
-    First checks user config for custom mappings, then falls back to the
-    active provider catalog (OpenRouter live data or bundled JSON).
+    First checks user config for custom mappings, then falls back to
+    provider_models.json mappings.
 
     Parameters
     ----------
