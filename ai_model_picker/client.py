@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, Tuple
 
 from .config import (
     get_available_providers,
@@ -90,6 +90,66 @@ _PROVIDER_QUIRKS: Dict[str, Dict[str, Any]] = {
         "supports_system_in_messages": True,
         "response_path": "output.text",
         # Uses DashScope API
+    },
+    "moonshot": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.moonshot.ai/v1",
+    },
+    "zai": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.z.ai/api/paas/v4/",
+    },
+    "minimax": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.minimax.io/v1",
+    },
+    "perplexity": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.perplexity.ai",
+    },
+    "nvidia": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+    },
+    "bytedance": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    },
+    "tencent": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+    },
+    "xiaomi": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.xiaomimimo.com/v1",
+    },
+    "amazon": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+    },
+    "stepfun": {
+        "supports_timeout": True,
+        "supports_system_in_messages": True,
+        "response_path": "choices[0].message.content",
+        "base_url": "https://api.stepfun.com/v1",
     },
 }
 
@@ -378,102 +438,6 @@ def _call_cohere(
     )
 
 
-def _call_deepseek(
-    prompt: str,
-    model: str,
-    api_key: str,
-    config: AIClientConfig,
-) -> AIResponse:
-    """Call DeepSeek API (OpenAI-compatible)."""
-    try:
-        import openai
-    except ImportError:
-        raise ImportError("openai package not installed. Install with: pip install openai")
-
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.deepseek.com",
-    )
-
-    messages = []
-    if config.system_prompt:
-        messages.append({"role": "system", "content": config.system_prompt})
-    messages.append({"role": "user", "content": prompt})
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        timeout=config.timeout,
-    )
-
-    content = response.choices[0].message.content or ""
-    usage = None
-    if response.usage:
-        usage = {
-            "prompt_tokens": response.usage.prompt_tokens,
-            "completion_tokens": response.usage.completion_tokens,
-            "total_tokens": response.usage.total_tokens,
-        }
-
-    return AIResponse(
-        content=content.strip(),
-        model=model,
-        provider="deepseek",
-        usage=usage,
-        raw_response=response,
-    )
-
-
-def _call_xai(
-    prompt: str,
-    model: str,
-    api_key: str,
-    config: AIClientConfig,
-) -> AIResponse:
-    """Call xAI (Grok) API (OpenAI-compatible)."""
-    try:
-        import openai
-    except ImportError:
-        raise ImportError("openai package not installed. Install with: pip install openai")
-
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.x.ai/v1",
-    )
-
-    messages = []
-    if config.system_prompt:
-        messages.append({"role": "system", "content": config.system_prompt})
-    messages.append({"role": "user", "content": prompt})
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
-        timeout=config.timeout,
-    )
-
-    content = response.choices[0].message.content or ""
-    usage = None
-    if response.usage:
-        usage = {
-            "prompt_tokens": response.usage.prompt_tokens,
-            "completion_tokens": response.usage.completion_tokens,
-            "total_tokens": response.usage.total_tokens,
-        }
-
-    return AIResponse(
-        content=content.strip(),
-        model=model,
-        provider="xai",
-        usage=usage,
-        raw_response=response,
-    )
-
-
 def _call_alibaba(
     prompt: str,
     model: str,
@@ -523,29 +487,41 @@ def _call_alibaba(
     )
 
 
-def _call_meta(
+# OpenAI-compatible providers: key -> (default_base_url, optional_base_url_env)
+_OPENAI_COMPAT_ENDPOINTS: Dict[str, Tuple[str, Optional[str]]] = {
+    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_BASE_URL"),
+    "xai": ("https://api.x.ai/v1", "XAI_BASE_URL"),
+    "meta": ("https://api.together.xyz/v1", "META_BASE_URL"),
+    "moonshot": ("https://api.moonshot.ai/v1", "MOONSHOT_BASE_URL"),
+    "zai": ("https://api.z.ai/api/paas/v4/", "ZAI_BASE_URL"),
+    "minimax": ("https://api.minimax.io/v1", "MINIMAX_BASE_URL"),
+    "perplexity": ("https://api.perplexity.ai", "PERPLEXITY_BASE_URL"),
+    "nvidia": ("https://integrate.api.nvidia.com/v1", "NVIDIA_BASE_URL"),
+    "bytedance": ("https://ark.cn-beijing.volces.com/api/v3", "BYTEDANCE_BASE_URL"),
+    "tencent": ("https://api.hunyuan.cloud.tencent.com/v1", "TENCENT_BASE_URL"),
+    "xiaomi": ("https://api.xiaomimimo.com/v1", "XIAOMI_BASE_URL"),
+    "amazon": ("https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1", "AMAZON_BASE_URL"),
+    "stepfun": ("https://api.stepfun.com/v1", "STEPFUN_BASE_URL"),
+}
+
+
+def _call_openai_compatible(
+    provider: str,
     prompt: str,
     model: str,
     api_key: str,
     config: AIClientConfig,
 ) -> AIResponse:
-    """
-    Call Meta Llama API.
-
-    Note: Meta models are typically accessed via third-party APIs like
-    Together.ai, Replicate, or cloud providers. This implementation
-    uses the Together.ai API as it's the most common.
-    """
+    """Call an OpenAI-compatible chat completions endpoint."""
     try:
         import openai
     except ImportError:
         raise ImportError("openai package not installed. Install with: pip install openai")
 
-    # Use Together.ai as default endpoint for Meta models
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.together.xyz/v1",
-    )
+    default_base, base_env = _OPENAI_COMPAT_ENDPOINTS[provider]
+    base_url = os.getenv(base_env, default_base) if base_env else default_base
+
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)
 
     messages = []
     if config.system_prompt:
@@ -572,10 +548,24 @@ def _call_meta(
     return AIResponse(
         content=content.strip(),
         model=model,
-        provider="meta",
+        provider=provider,
         usage=usage,
         raw_response=response,
     )
+
+
+def _make_openai_compat_handler(provider: str) -> Callable:
+    def handler(
+        prompt: str,
+        model: str,
+        api_key: str,
+        config: AIClientConfig,
+    ) -> AIResponse:
+        return _call_openai_compatible(provider, prompt, model, api_key, config)
+
+    handler.__name__ = f"_call_{provider}"
+    handler.__doc__ = f"Call {provider} via OpenAI-compatible API."
+    return handler
 
 
 # Provider handler registry
@@ -585,11 +575,10 @@ _PROVIDER_HANDLERS: Dict[str, Callable] = {
     "google": _call_google,
     "mistral": _call_mistral,
     "cohere": _call_cohere,
-    "deepseek": _call_deepseek,
-    "xai": _call_xai,
     "alibaba": _call_alibaba,
-    "meta": _call_meta,
 }
+for _provider_key in _OPENAI_COMPAT_ENDPOINTS:
+    _PROVIDER_HANDLERS[_provider_key] = _make_openai_compat_handler(_provider_key)
 
 
 def call_ai(
@@ -763,7 +752,7 @@ def check_provider_available(provider: str) -> tuple[bool, Optional[str]]:
             import mistralai
         elif provider == "cohere":
             import cohere
-        elif provider in ("deepseek", "xai", "meta"):
+        elif provider in _OPENAI_COMPAT_ENDPOINTS:
             import openai  # Uses OpenAI-compatible API
         elif provider == "alibaba":
             import dashscope
